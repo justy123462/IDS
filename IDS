@@ -1,0 +1,53 @@
+import win32evtlog
+import time
+import win32evtlogutil
+import re
+
+# Constants
+SERVER = 'localhost'
+LOG_TYPE = 'Security'
+SUSPICIOUS_PATTERNS = [
+    r"Logon Type:\s+3",                  # Network logon
+    r"An account failed to log on",      # Failed login
+    r"Special privileges assigned to new logon",
+    r"Logon attempt using explicit credentials",
+    r"Account was locked out",
+]
+
+def alert(message):
+    print(f"\n[!] ALERT: Suspicious event detected:\n    {message}\n")
+
+def scan_event(event_string):
+    for pattern in SUSPICIOUS_PATTERNS:
+        if re.search(pattern, event_string):
+            alert(event_string.strip())
+            break
+
+def monitor_logs():
+    print(f"[*] Monitoring Windows '{LOG_TYPE}' event log...\nPress Ctrl+C to stop.")
+    flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+    hand = win32evtlog.OpenEventLog(SERVER, LOG_TYPE)
+    
+    try:
+        while True:
+            events = win32evtlog.ReadEventLog(hand, flags, 0)
+            if events:
+                    for event in events:
+                        try:
+                            message = win32evtlogutil.SafeFormatMessage(event, LOG_TYPE)
+                            scan_event(message)
+                        except Exception as e:
+                            print(f"[!] Error processing event: {e}")
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("\n[+] IDS stopped by user.")
+    except Exception as e:
+        print(f"[!] Error: {e}")
+
+if __name__ == "__main__":
+    # Define the event variable to avoid NameError
+    event = None
+    try:
+        monitor_logs()
+    except Exception as e:
+        print(f"[!] Critical error occurred: {e}")
